@@ -1,18 +1,7 @@
 # set_cpu_governor_ubuntu_22.04
 
-After enabling
+After enabling the service
 
 cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 
-should return:
-
-performance
-performance
-performance
-performance
-performance
-performance
-performance
-performance
-
-On 8 core system
+Should return "performance" on all cores
