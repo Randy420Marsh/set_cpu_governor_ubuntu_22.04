@@ -1,0 +1,1 @@
+# set_cpu_governor_ubuntu_22.04
