@@ -1,0 +1,107 @@
+
+
+I had the same problem with my AMD Ryzen 5 3400G with Radeon Vega Graphics, running Ubuntu 22.04.
+
+I solved the problem as follows :
+
+sudo systemctl mask power-profiles-daemon.service
+sudo systemctl stop power-profiles-daemon.service
+
+Then I created three files in the following locations:
+
+    /etc/default/mygovernor
+
+    -rw-r--r-- 1 root root 447 Oct 2 13:11 mygovernor
+
+with the following contents:
+
+# J.T. 2022-10-02
+# Environment file for systemd service /etc/systemd/system /mygovernor.service
+# which set the cpufreq governor to be used by the system.  A list of supported
+# governors may be found by the following command:
+# "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
+# conservative ondemand userspace powersave performance schedutil
+
+#GOVERNOR=powersave
+#GOVERNOR=schedutil
+#GOVERNOR=ondemand
+GOVERNOR=performance
+
+    /etc/systemd/set-mygovernor
+
+    -rwxr-xr-x 1 root root 884 Oct 2 13:05 set-mygovernor
+
+with the following contents:
+
+#! /bin/bash
+# J.T. 2022-10-02
+# This script is called by script /etc/systemd/system/mygovernor.service
+# It will set the CPU Frequency Scaling governor to the value passed in
+# the first command line argument "$1"
+
+set -eu
+
+FIRSTCPU=$(cut -f1 -d- /sys/devices/system/cpu/online)
+AVAILABLE=$(/bin/cat /sys/devices/system/cpu/cpu${FIRSTCPU}/cpufreq/scaling_available_governors)
+
+# Check if the specified commandline governor ID is supported on this PC
+
+GOVERNOR=""
+
+for gov in ${AVAILABLE}; do
+    if [[ "${gov}" == "${1}" ]]; then
+        GOVERNOR="${gov}"
+        break
+    fi
+done
+
+if [ -z ${GOVERNOR} ]; then
+        echo "Unknown governor =" \"${1}\"
+       exit 1
+fi
+
+echo "Setting CPUFreq Scaling governor = \"$GOVERNOR\" for all CPUs"
+
+for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+do
+        [ -f "${CPUFREQ}" ] || continue
+        echo -n "${GOVERNOR}" > ${CPUFREQ}
+done
+
+    /etc/systemd/system/mygovernor.service
+
+with the following contents:
+
+# J.T. 2022-10-02
+# This service set the cpufreq scaling governor, to the value of 
+# environment variable "GOVERNOR" defined in file "/etc/default/mygovernor"
+# This service will not execute unless Ubuntu service "power-profiles-daemon.service"
+# is masked. It may be masked with the following command:
+# "sudo systemctl mask power-profiles-daemon.service"
+
+[Unit]
+Description=Set CPU Frequency Scaling governor
+ConditionVirtualization=no
+ConditionPathExists=/sys/devices/system/cpu/online
+
+[Service]
+Type=idle
+EnvironmentFile=/etc/default/mygovernor
+ExecCondition=/bin/bash -xc '/bin/systemctl is-masked --quiet power-profiles-daemon.service && exit 1 || exit 0'
+ExecStart=/etc/systemd/set-mygovernor ${GOVERNOR}
+
+[Install]
+WantedBy=multi-user.target
+
+then I enabled and started the new service:
+
+sudo systemctl enable mygovernor.service
+sudo systemctl start mygovernor.service
+
+You can monitor your governors with cpufreq-info from the package "cpufrequtils". Or use gkrellm system monitor with cpufreq-utils plugin.
+
+It also works on Ubuntu 20.04 but you have to replace "power-profiles-daemon.service" with "ondemand.service". The rest is the same.
+
+Hope this is what you were looking for. The code is base on a number of examples from the internet but I forgot where so I can't acknowledge them.
+
+To change the governor edit /etc/default/mygovernor and restart mygovernor service.
